@@ -1,78 +1,82 @@
-import type { Metadata } from 'next'
-import siteData from '@/content/site.json'
+import type { Metadata } from 'next';
 
-interface SEOProps {
-  title?: string
-  description?: string
-  image?: string
-  url?: string
+interface SEOConfig {
+  title: string;
+  description: string;
+  image?: string;
+  url?: string;
 }
 
-export function generateSEO({
-  title,
-  description,
-  image = '/og-image.jpg',
-  url = ''
-}: SEOProps = {}): Metadata {
-  const siteTitle = title ? `${title} | ${siteData.site.name}` : siteData.site.name
-  const siteDescription = description || siteData.site.description
-  const siteUrl = `${siteData.site.url}${url}`
+export function generateMetadata(config: SEOConfig): Metadata {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tumarca.com';
+  const fullUrl = config.url ? `${siteUrl}${config.url}` : siteUrl;
+  const image = config.image || `${siteUrl}/og-image.jpg`;
 
   return {
-    title: siteTitle,
-    description: siteDescription,
+    title: config.title,
+    description: config.description,
     openGraph: {
-      title: siteTitle,
-      description: siteDescription,
-      url: siteUrl,
-      siteName: siteData.site.name,
+      title: config.title,
+      description: config.description,
+      url: fullUrl,
+      siteName: 'TuMarca',
       images: [
         {
           url: image,
           width: 1200,
           height: 630,
-          alt: siteTitle,
+          alt: config.title,
         },
       ],
+      locale: 'es_ES',
       type: 'website',
     },
     twitter: {
       card: 'summary_large_image',
-      title: siteTitle,
-      description: siteDescription,
+      title: config.title,
+      description: config.description,
       images: [image],
     },
     robots: {
       index: true,
       follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        'max-video-preview': -1,
-        'max-image-preview': 'large',
-        'max-snippet': -1,
-      },
     },
-    alternates: {
-      canonical: siteUrl,
-    },
-  }
+  };
 }
 
 export function generateJSONLD() {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tumarca.com';
+  
   return {
     '@context': 'https://schema.org',
-    '@type': 'Organization',
-    name: siteData.site.name,
-    url: siteData.site.url,
-    logo: `${siteData.site.url}/logo.png`,
-    description: siteData.site.description,
-    email: siteData.site.email,
-    telephone: siteData.site.phone,
-    sameAs: [],
-    address: {
-      '@type': 'PostalAddress',
-      addressCountry: 'ES',
-    },
-  }
+    '@graph': [
+      {
+        '@type': 'Organization',
+        '@id': `${siteUrl}/#organization`,
+        name: 'TuMarca',
+        url: siteUrl,
+        sameAs: [],
+        logo: {
+          '@type': 'ImageObject',
+          '@id': `${siteUrl}/#logo`,
+          url: `${siteUrl}/logo.png`,
+          contentUrl: `${siteUrl}/logo.png`,
+          width: 512,
+          height: 512,
+          caption: 'TuMarca',
+        },
+      },
+      {
+        '@type': 'WebSite',
+        '@id': `${siteUrl}/#website`,
+        url: siteUrl,
+        name: 'TuMarca',
+        description: 'Landing pages modernas que convierten',
+        publisher: {
+          '@id': `${siteUrl}/#organization`,
+        },
+        inLanguage: 'es-ES',
+      },
+    ],
+  };
 }

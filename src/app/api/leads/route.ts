@@ -1,37 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { rateLimit } from '@/lib/rate-limit';
 import { saveLead } from '@/lib/leads-storage';
+import { rateLimiter } from '@/lib/rate-limit';
 
-const leadSchema = z.object({
-  name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(100),
-  email: z.string().email('Email inválido').max(255),
-  message: z.string().min(10, 'El mensaje debe tener al menos 10 caracteres').max(1000),
-  honeypot: z.string().optional(), // Campo honeypot para detectar bots
+const LeadSchema = z.object({
+  name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  email: z.string().email('Email inválido'),
+  message: z.string().min(10, 'El mensaje debe tener al menos 10 caracteres'),
+  honeypot: z.string().optional(),
 });
 
+// GET endpoint for healthcheck
+export async function GET() {
+  return NextResponse.json({ 
+    ok: true, 
+    message: 'Use POST to submit leads.' 
+  });
+}
+
+// POST endpoint for submitting leads
 export async function POST(request: NextRequest) {
   try {
-    // Get client IP for rate limiting
+    // Get client IP
     const ip = request.ip || 
-              request.headers.get('x-forwarded-for')?.split(',')[0] || 
-              'unknown';
+               request.headers.get('x-forwarded-for') || 
+               request.headers.get('x-real-ip') || 
+               'unknown';
 
-    // Rate limiting
-    const rateLimitResult = rateLimit(ip);
-    
-    if (!rateLimitResult.success) {
+    // Check rate limit
+    const rateLimitResult = rateLimiter.check(ip);
+    if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { 
-          error: 'Demasiadas solicitudes. Inténtalo más tarde.',
-          retryAfter: rateLimitResult.reset 
+          success: false, 
+          message: 'Demasiadas solicitudes. Intenta de nuevo más tarde.' 
         },
         { 
           status: 429,
           headers: {
-            'X-RateLimit-Limit': rateLimitResult.limit.toString(),
             'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-            'X-RateLimit-Reset': rateLimitResult.reset.toISOString(),
+            'X-RateLimit-Reset': new Date(rateLimitResult.resetTime).toISOString(),
           }
         }
       );
@@ -39,66 +47,78 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     
-    // Validate data
-    const validatedData = leadSchema.parse(body);
+    // Validate input
+    const validatedData = LeadSchema.parse(body);
 
-    // Honeypot check - if honeypot field is filled, it's likely a bot
+    // Honeypot check - if filled, it's likely a bot
     if (validatedData.honeypot && validatedData.honeypot.trim() !== '') {
-      return NextResponse.json(
-        { message: 'Mensaje enviado correctamente' }, 
-        { status: 200 }
-      );
+      // Return success to not reveal the honeypot to bots
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Gracias por tu mensaje' 
+      });
     }
 
+    // Get user agent
+    const userAgent = request.headers.get('user-agent') || 'unknown';
+
     // Save lead
-    const lead = saveLead({
+    const lead = await saveLead({
       name: validatedData.name,
       email: validatedData.email,
       message: validatedData.message,
       ip,
-      userAgent: request.headers.get('user-agent') || undefined,
+      userAgent,
     });
 
     // Send to n8n webhook if configured
-    if (process.env.N8N_WEBHOOK_URL) {
+    const webhookUrl = process.env.N8N_WEBHOOK_URL;
+    if (webhookUrl) {
       try {
-        await fetch(process.env.N8N_WEBHOOK_URL, {
+        await fetch(webhookUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify(lead),
         });
-      } catch (error) {
-        console.error('Error sending to n8n webhook:', error);
+      } catch (webhookError) {
+        console.error('Error sending to webhook:', webhookError);
         // Don't fail the request if webhook fails
       }
     }
 
     return NextResponse.json(
-      { message: 'Mensaje enviado correctamente' },
       { 
-        status: 200,
+        success: true, 
+        message: 'Mensaje enviado correctamente' 
+      },
+      {
         headers: {
-          'X-RateLimit-Limit': rateLimitResult.limit.toString(),
           'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-          'X-RateLimit-Reset': rateLimitResult.reset.toISOString(),
         }
       }
     );
 
   } catch (error) {
+    console.error('Error processing lead:', error);
+
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { 
-          error: 'Datos inválidos',
-          details: error.errors.map(e => e.message)
+          success: false, 
+          message: error.errors[0].message,
+          errors: error.errors 
         },
         { status: 400 }
       );
     }
 
-    console.error('Error processing lead:', error);
     return NextResponse.json(
-      { error: 'Error interno del servidor' },
+      { 
+        success: false, 
+        message: 'Error interno del servidor' 
+      },
       { status: 500 }
     );
   }

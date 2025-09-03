@@ -1,32 +1,30 @@
-import { POST } from '../../src/app/api/leads/route';
-import { z } from 'zod';
+/**
+ * @jest-environment node
+ */
 
-// Mock NextRequest
-class MockNextRequest {
-  constructor(body, options = {}) {
-    this.body = body;
-    this.ip = options.ip || '127.0.0.1';
-    this.headers = new Map([
-      ['user-agent', options.userAgent || 'test-agent'],
-      ...Object.entries(options.headers || {})
-    ]);
+import { POST, GET } from '../../src/app/api/leads/route';
+
+// Mock the dependencies
+jest.mock('../../src/lib/leads-storage', () => ({
+  saveLead: jest.fn().mockResolvedValue({
+    id: 'test-id',
+    name: 'Test User',
+    email: 'test@example.com',
+    message: 'Test message content',
+    createdAt: '2024-01-01T00:00:00.000Z',
+    ip: '127.0.0.1',
+    userAgent: 'test-agent'
+  })
+}));
+
+jest.mock('../../src/lib/rate-limit', () => ({
+  rateLimiter: {
+    check: jest.fn().mockReturnValue({
+      allowed: true,
+      remaining: 19,
+      resetTime: Date.now() + 60000
+    })
   }
-
-  async json() {
-    return this.body;
-  }
-
-  get(name) {
-    return this.headers.get(name);
-  }
-}
-
-// Mock file system for testing
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(() => '[]'),
-  writeFileSync: jest.fn(),
-  existsSync: jest.fn(() => true),
-  mkdirSync: jest.fn(),
 }));
 
 describe('/api/leads', () => {
@@ -34,81 +32,148 @@ describe('/api/leads', () => {
     jest.clearAllMocks();
   });
 
-  test('should accept valid lead data', async () => {
-    const validData = {
-      name: 'Juan Pérez',
-      email: 'juan@example.com',
-      message: 'Estoy interesado en sus servicios de desarrollo web.',
-    };
-
-    const request = new MockNextRequest(validData);
-    const response = await POST(request);
-    const responseData = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(responseData.message).toBe('Mensaje enviado correctamente');
+  describe('GET', () => {
+    test('should return healthcheck message', async () => {
+      const response = await GET();
+      const data = await response.json();
+      
+      expect(response.status).toBe(200);
+      expect(data.ok).toBe(true);
+      expect(data.message).toBe('Use POST to submit leads.');
+    });
   });
 
-  test('should reject invalid email', async () => {
-    const invalidData = {
-      name: 'Juan Pérez',
-      email: 'email-invalido',
-      message: 'Mensaje de prueba válido.',
-    };
+  describe('POST', () => {
+    test('should accept valid lead data', async () => {
+      const validLead = {
+        name: 'John Doe',
+        email: 'john@example.com',
+        message: 'This is a test message with enough characters'
+      };
 
-    const request = new MockNextRequest(invalidData);
-    const response = await POST(request);
-    const responseData = await response.json();
+      const mockRequest = {
+        json: () => Promise.resolve(validLead),
+        ip: '127.0.0.1',
+        headers: {
+          get: (name) => {
+            const headers = {
+              'user-agent': 'test-browser/1.0'
+            };
+            return headers[name] || null;
+          }
+        }
+      };
 
-    expect(response.status).toBe(400);
-    expect(responseData.error).toBe('Datos inválidos');
-    expect(responseData.details).toContain('Email inválido');
+      const response = await POST(mockRequest);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.message).toBe('Mensaje enviado correctamente');
+    });
+
+    test('should reject invalid email', async () => {
+      const invalidLead = {
+        name: 'John Doe',
+        email: 'invalid-email',
+        message: 'This is a test message with enough characters'
+      };
+
+      const mockRequest = {
+        json: () => Promise.resolve(invalidLead),
+        ip: '127.0.0.1',
+        headers: {
+          get: () => null
+        }
+      };
+
+      const response = await POST(mockRequest);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(data.message).toBe('Email inválido');
+    });
+
+    test('should reject short message', async () => {
+      const invalidLead = {
+        name: 'John Doe',
+        email: 'john@example.com',
+        message: 'Short'
+      };
+
+      const mockRequest = {
+        json: () => Promise.resolve(invalidLead),
+        ip: '127.0.0.1',
+        headers: {
+          get: () => null
+        }
+      };
+
+      const response = await POST(mockRequest);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(data.message).toBe('El mensaje debe tener al menos 10 caracteres');
+    });
+
+    test('should handle honeypot (bot protection)', async () => {
+      const botLead = {
+        name: 'Bot Name',
+        email: 'bot@spam.com',
+        message: 'This is a spam message from bot',
+        honeypot: 'filled-by-bot'
+      };
+
+      const mockRequest = {
+        json: () => Promise.resolve(botLead),
+        ip: '127.0.0.1',
+        headers: {
+          get: () => null
+        }
+      };
+
+      const response = await POST(mockRequest);
+      const data = await response.json();
+
+      // Should return success to not reveal honeypot to bots
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.message).toBe('Gracias por tu mensaje');
+    });
   });
 
-  test('should reject short name', async () => {
-    const invalidData = {
-      name: 'A',
-      email: 'juan@example.com',
-      message: 'Mensaje de prueba válido.',
-    };
+  describe('Rate Limiting', () => {
+    test('should respect rate limits', async () => {
+      // Mock rate limiter to return not allowed
+      const { rateLimiter } = require('../../src/lib/rate-limit');
+      rateLimiter.check.mockReturnValueOnce({
+        allowed: false,
+        remaining: 0,
+        resetTime: Date.now() + 60000
+      });
 
-    const request = new MockNextRequest(invalidData);
-    const response = await POST(request);
-    const responseData = await response.json();
+      const validLead = {
+        name: 'John Doe',
+        email: 'john@example.com',
+        message: 'This is a test message with enough characters'
+      };
 
-    expect(response.status).toBe(400);
-    expect(responseData.error).toBe('Datos inválidos');
-  });
+      const mockRequest = {
+        json: () => Promise.resolve(validLead),
+        ip: '127.0.0.1',
+        headers: {
+          get: () => null
+        }
+      };
 
-  test('should reject short message', async () => {
-    const invalidData = {
-      name: 'Juan Pérez',
-      email: 'juan@example.com',
-      message: 'Corto',
-    };
+      const response = await POST(mockRequest);
+      const data = await response.json();
 
-    const request = new MockNextRequest(invalidData);
-    const response = await POST(request);
-    const responseData = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(responseData.error).toBe('Datos inválidos');
-  });
-
-  test('should handle honeypot (bot detection)', async () => {
-    const botData = {
-      name: 'Bot Name',
-      email: 'bot@example.com',
-      message: 'Bot message with sufficient length.',
-      honeypot: 'bot-filled-value', // Bots suelen llenar todos los campos
-    };
-
-    const request = new MockNextRequest(botData);
-    const response = await POST(request);
-    const responseData = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(responseData.message).toBe('Mensaje enviado correctamente');
-    // El bot no debería generar un error, pero el lead no se debería guardar realmente
+      expect(response.status).toBe(429);
+      expect(data.success).toBe(false);
+      expect(data.message).toBe('Demasiadas solicitudes. Intenta de nuevo más tarde.');
+    });
   });
 });

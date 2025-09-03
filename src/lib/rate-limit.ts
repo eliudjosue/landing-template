@@ -1,77 +1,76 @@
-interface RateLimitResult {
-  success: boolean;
-  limit: number;
-  remaining: number;
-  reset: Date;
+interface RateLimitStore {
+  [ip: string]: {
+    count: number;
+    resetTime: number;
+  };
 }
 
-class SimpleRateLimit {
-  private requests: Map<string, number[]> = new Map();
-  private readonly window: number;
-  private readonly maxRequests: number;
+class RateLimit {
+  private store: RateLimitStore = {};
+  private window: number; // in seconds
+  private max: number;
 
-  constructor(windowMs: number = 60000, maxRequests: number = 20) {
-    this.window = windowMs;
-    this.maxRequests = maxRequests;
+  constructor() {
+    this.window = parseInt(process.env.RATE_LIMIT_WINDOW || '60');
+    this.max = parseInt(process.env.RATE_LIMIT_MAX || '20');
   }
 
-  check(identifier: string): RateLimitResult {
+  check(ip: string): { allowed: boolean; remaining: number; resetTime: number } {
     const now = Date.now();
-    const windowStart = now - this.window;
+    const key = ip;
 
-    // Get existing requests for this identifier
-    const requests = this.requests.get(identifier) || [];
-    
-    // Filter out old requests
-    const validRequests = requests.filter(time => time > windowStart);
-    
-    // Check if limit exceeded
-    if (validRequests.length >= this.maxRequests) {
-      const oldestRequest = Math.min(...validRequests);
-      const reset = new Date(oldestRequest + this.window);
-      
+    // Clean up expired entries
+    this.cleanup();
+
+    if (!this.store[key]) {
+      this.store[key] = {
+        count: 1,
+        resetTime: now + (this.window * 1000),
+      };
       return {
-        success: false,
-        limit: this.maxRequests,
-        remaining: 0,
-        reset,
+        allowed: true,
+        remaining: this.max - 1,
+        resetTime: this.store[key].resetTime,
       };
     }
 
-    // Add current request
-    validRequests.push(now);
-    this.requests.set(identifier, validRequests);
+    const record = this.store[key];
 
-    // Clean up old entries periodically
-    if (Math.random() < 0.1) {
-      this.cleanup(windowStart);
+    if (now > record.resetTime) {
+      // Reset the window
+      record.count = 1;
+      record.resetTime = now + (this.window * 1000);
+      return {
+        allowed: true,
+        remaining: this.max - 1,
+        resetTime: record.resetTime,
+      };
     }
 
+    if (record.count >= this.max) {
+      return {
+        allowed: false,
+        remaining: 0,
+        resetTime: record.resetTime,
+      };
+    }
+
+    record.count++;
     return {
-      success: true,
-      limit: this.maxRequests,
-      remaining: this.maxRequests - validRequests.length,
-      reset: new Date(now + this.window),
+      allowed: true,
+      remaining: this.max - record.count,
+      resetTime: record.resetTime,
     };
   }
 
-  private cleanup(windowStart: number) {
-    for (const [key, requests] of this.requests.entries()) {
-      const validRequests = requests.filter(time => time > windowStart);
-      if (validRequests.length === 0) {
-        this.requests.delete(key);
-      } else {
-        this.requests.set(key, validRequests);
+  private cleanup() {
+    const now = Date.now();
+    Object.keys(this.store).forEach(key => {
+      if (now > this.store[key].resetTime) {
+        delete this.store[key];
       }
-    }
+    });
   }
 }
 
-const rateLimiter = new SimpleRateLimit(
-  parseInt(process.env.RATE_LIMIT_WINDOW || '60') * 1000,
-  parseInt(process.env.RATE_LIMIT_MAX || '20')
-);
-
-export function rateLimit(identifier: string): RateLimitResult {
-  return rateLimiter.check(identifier);
-}
+export const rateLimiter = new RateLimit();

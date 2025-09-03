@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getLeads } from '@/lib/leads-storage';
 
+// GET endpoint to check if user is authenticated
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
   
   if (!authHeader || !authHeader.startsWith('Basic ')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 
   try {
@@ -17,23 +17,21 @@ export async function GET(request: NextRequest) {
     const adminPassword = process.env.ADMIN_PASSWORD;
 
     if (!adminUser || !adminPassword) {
+      console.error('ADMIN_USER or ADMIN_PASSWORD environment variables not set');
       return NextResponse.json({ error: 'Admin credentials not configured' }, { status: 500 });
     }
 
-    if (username !== adminUser || password !== adminPassword) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (username === adminUser && password === adminPassword) {
+      return NextResponse.json({ authenticated: true });
+    } else {
+      return NextResponse.json({ authenticated: false }, { status: 401 });
     }
-
-    const leads = await getLeads();
-    
-    // Sort by creation date (newest first)
-    const sortedLeads = leads.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-
-    return NextResponse.json({ leads: sortedLeads });
   } catch (error) {
-    console.error('Error fetching leads:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Invalid authentication' }, { status: 401 });
   }
+}
+
+// POST endpoint for authentication
+export async function POST(request: NextRequest) {
+  return GET(request);
 }

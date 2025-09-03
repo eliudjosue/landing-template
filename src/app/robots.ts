@@ -1,13 +1,14 @@
-import { MetadataRoute } from 'next'
-import siteData from '@/content/site.json'
+import type { MetadataRoute } from 'next';
 
 export default function robots(): MetadataRoute.Robots {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tumarca.com';
+  
   return {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/admin/', '/api/'],
+      disallow: ['/admin', '/api'],
     },
-    sitemap: `${siteData.site.url}/sitemap.xml`,
-  }
+    sitemap: `${baseUrl}/sitemap.xml`,
+  };
 }

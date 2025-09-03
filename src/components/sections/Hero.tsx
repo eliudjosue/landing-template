@@ -1,68 +1,73 @@
-'use client';
-
+import React from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Play } from 'lucide-react';
-import siteData from '@/content/site.json';
+import type { Hero } from '../../types/content';
+// or update the path to the correct location of your Hero type
 
-export function Hero() {
-  const scrollToContact = () => {
-    document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' });
-  };
+interface HeroProps {
+  hero: Hero;
+}
+
+export default function HeroSection({ hero }: HeroProps) {
+  if (!hero.enabled) return null;
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      <div className="absolute inset-0 bg-[url('https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg')] bg-cover bg-center opacity-10" />
-      
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
-            {siteData.hero.headline}
-          </h1>
-          
-          <p className="text-xl md:text-2xl text-blue-100 mb-12 max-w-3xl mx-auto leading-relaxed">
-            {siteData.hero.subheadline}
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button 
-              size="lg" 
-              onClick={scrollToContact}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg group transition-all duration-300"
-            >
-              {siteData.hero.cta}
-              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
+    <section id="inicio" className="min-h-screen flex items-center justify-center bg-[var(--bg)] pt-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          {/* Content */}
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-[var(--fg)] leading-tight">
+                {hero.title}
+              </h1>
+              <p className="text-xl text-[var(--fg)]/80 leading-relaxed">
+                {hero.subtitle}
+              </p>
+            </div>
             
-            <Button 
-              variant="outline" 
-              size="lg"
-              className="border-white text-white hover:bg-white hover:text-slate-900 px-8 py-3 text-lg group transition-all duration-300"
-            >
-              <Play className="mr-2 h-5 w-5" />
-              {siteData.hero.ctaSecondary}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button 
+                asChild
+                size="lg"
+                className="bg-[var(--brand)] hover:bg-[var(--brand)]/90 text-white px-8 py-4 text-lg font-semibold transition-all duration-300 transform hover:scale-105 rounded-[var(--radius-lg)]"
+              >
+                <Link href={hero.primaryCta.href}>
+                  {hero.primaryCta.label}
+                </Link>
+              </Button>
+              
+              <Button 
+                asChild
+                variant="outline"
+                size="lg"
+                className="border-[var(--muted)] text-[var(--fg)] hover:bg-[var(--muted)] px-8 py-4 text-lg transition-all duration-300 rounded-[var(--radius-lg)]"
+              >
+                <Link href={hero.secondaryCta.href}>
+                  {hero.secondaryCta.label}
+                </Link>
+              </Button>
+            </div>
           </div>
 
-          <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-8 text-white/80">
-            <div>
-              <div className="text-3xl font-bold text-white">100+</div>
-              <div className="text-sm">Proyectos completados</div>
+          {/* Image */}
+          <div className="relative">
+            <div className="relative aspect-square lg:aspect-[4/3] overflow-hidden rounded-[var(--radius-xl)] shadow-2xl">
+              <Image
+                src={hero.image}
+                alt="Hero image"
+                fill
+                className="object-cover transition-transform duration-700 hover:scale-105"
+                priority
+              />
+              <div className="absolute inset-0 bg-gradient-to-tr from-[var(--brand)]/20 to-transparent" />
             </div>
-            <div>
-              <div className="text-3xl font-bold text-white">98%</div>
-              <div className="text-sm">Clientes satisfechos</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-white">24/7</div>
-              <div className="text-sm">Soporte técnico</div>
-            </div>
+            
+            {/* Decorative elements */}
+            <div className="absolute -top-4 -right-4 w-24 h-24 bg-[var(--brand)]/20 rounded-full blur-2xl animate-pulse" />
+            <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-[var(--brand)]/10 rounded-full blur-2xl animate-pulse delay-1000" />
           </div>
-        </div>
-      </div>
-
-      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
-        <div className="w-6 h-10 border-2 border-white/30 rounded-full flex justify-center">
-          <div className="w-1 h-3 bg-white/60 rounded-full mt-2 animate-pulse" />
         </div>
       </div>
     </section>

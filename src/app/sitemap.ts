@@ -1,13 +1,14 @@
-import { MetadataRoute } from 'next'
-import siteData from '@/content/site.json'
+import type { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tumarca.com';
+  
   return [
     {
-      url: siteData.site.url,
+      url: baseUrl,
       lastModified: new Date(),
-      changeFrequency: 'monthly',
+      changeFrequency: 'weekly',
       priority: 1,
     },
-  ]
+  ];
 }

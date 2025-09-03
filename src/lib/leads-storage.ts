@@ -1,61 +1,57 @@
-import type { Lead } from '@/types/lead';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
+import type { Lead } from '@/types/content';
 
-const LEADS_FILE = path.join(process.cwd(), 'data', 'leads.json');
+const DATA_DIR = '.data';
+const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 
-export function ensureDataDir() {
-  const dataDir = path.dirname(LEADS_FILE);
-  if (!existsSync(dataDir)) {
-    require('fs').mkdirSync(dataDir, { recursive: true });
-  }
+interface LeadsData {
+  leads: Lead[];
 }
 
-export function getLeads(): Lead[] {
-  ensureDataDir();
-  
-  if (!existsSync(LEADS_FILE)) {
-    return [];
-  }
-
-  try {
-    const data = readFileSync(LEADS_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
-
-export function saveLead(lead: Omit<Lead, 'id' | 'createdAt'>): Lead {
-  const leads = getLeads();
-  
-  const newLead: Lead = {
-    ...lead,
-    id: crypto.randomUUID(),
-    createdAt: new Date(),
+export async function saveLead(leadData: Omit<Lead, 'id' | 'createdAt'>): Promise<Lead> {
+  const lead: Lead = {
+    ...leadData,
+    id: generateId(),
+    createdAt: new Date().toISOString(),
   };
 
-  leads.push(newLead);
-  
-  ensureDataDir();
-  writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
-  
-  return newLead;
+  try {
+    // Ensure data directory exists
+    await fs.mkdir(DATA_DIR, { recursive: true });
+
+    let data: LeadsData = { leads: [] };
+
+    try {
+      const fileContent = await fs.readFile(LEADS_FILE, 'utf-8');
+      data = JSON.parse(fileContent);
+    } catch (error) {
+      // File doesn't exist or is invalid, start with empty data
+      console.log('Creating new leads file');
+    }
+
+    data.leads.push(lead);
+
+    await fs.writeFile(LEADS_FILE, JSON.stringify(data, null, 2));
+
+    return lead;
+  } catch (error) {
+    console.error('Error saving lead:', error);
+    throw new Error('Failed to save lead');
+  }
 }
 
-export function generateCSV(leads: Lead[]): string {
-  const headers = ['ID', 'Nombre', 'Email', 'Mensaje', 'Fecha', 'IP', 'User Agent'];
-  const rows = leads.map(lead => [
-    lead.id,
-    lead.name,
-    lead.email,
-    `"${lead.message.replace(/"/g, '""')}"`,
-    lead.createdAt.toISOString(),
-    lead.ip || '',
-    `"${(lead.userAgent || '').replace(/"/g, '""')}"`
-  ]);
+export async function getLeads(): Promise<Lead[]> {
+  try {
+    const fileContent = await fs.readFile(LEADS_FILE, 'utf-8');
+    const data: LeadsData = JSON.parse(fileContent);
+    return data.leads || [];
+  } catch (error) {
+    // File doesn't exist or is invalid
+    return [];
+  }
+}
 
-  return [headers, ...rows]
-    .map(row => row.join(','))
-    .join('\n');
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }

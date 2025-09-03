@@ -1,41 +1,51 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Download, Users, Calendar, Mail } from 'lucide-react';
-import type { Lead } from '@/types/lead';
+import { Download, Search, Users, Mail, Calendar } from 'lucide-react';
+import type { Lead } from '@/types/content';
 
 export default function AdminPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
 
+  // Check authentication
   useEffect(() => {
-    fetchLeads();
+    checkAuth();
   }, []);
 
-  const fetchLeads = async () => {
+  const checkAuth = async () => {
     try {
-      const response = await fetch('/api/admin/leads', {
-        headers: {
-          'Authorization': 'Basic ' + btoa(`${process.env.NEXT_PUBLIC_ADMIN_USER || 'admin'}:${process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'password'}`),
-        },
-      });
+      const response = await fetch('/api/admin/auth');
+      setIsAuthenticated(response.ok);
+    } catch {
+      setIsAuthenticated(false);
+    }
+    setAuthLoading(false);
+  };
 
-      if (response.status === 401) {
-        setError('Acceso no autorizado');
-        return;
-      }
+  // Load leads if authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadLeads();
+    }
+  }, [isAuthenticated]);
 
+  const loadLeads = async () => {
+    try {
+      const response = await fetch('/api/admin/leads');
       if (!response.ok) {
-        throw new Error('Error al cargar los leads');
+        throw new Error('Error al cargar leads');
       }
-
       const data = await response.json();
-      setLeads(data.leads);
+      setLeads(data.leads || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -43,163 +53,275 @@ export default function AdminPage() {
     }
   };
 
-  const exportToCSV = async () => {
+  const handleAuth = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const username = formData.get('username') as string;
+    const password = formData.get('password') as string;
+
     try {
-      const response = await fetch('/api/admin/export', {
+      const response = await fetch('/api/admin/auth', {
+        method: 'POST',
         headers: {
-          'Authorization': 'Basic ' + btoa(`${process.env.NEXT_PUBLIC_ADMIN_USER || 'admin'}:${process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'password'}`),
-        },
+          'Authorization': 'Basic ' + btoa(`${username}:${password}`)
+        }
       });
 
-      if (!response.ok) {
-        throw new Error('Error al exportar');
+      if (response.ok) {
+        setIsAuthenticated(true);
+      } else {
+        setError('Credenciales incorrectas');
       }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `leads-${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      setError('Error al exportar CSV');
+    } catch {
+      setError('Error de autenticación');
     }
   };
 
-  if (loading) {
+  const exportCSV = () => {
+    const headers = ['Fecha', 'Nombre', 'Email', 'Mensaje', 'IP', 'User Agent'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredLeads.map(lead => [
+        new Date(lead.createdAt).toLocaleString('es-ES'),
+        `"${lead.name}"`,
+        lead.email,
+        `"${lead.message.replace(/"/g, '""')}"`,
+        lead.ip || '',
+        `"${lead.userAgent || ''}"`
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `leads-${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const filteredLeads = leads.filter(lead =>
+    lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.message.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Cargando panel admin...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Verificando acceso...</p>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardContent className="pt-6 text-center">
-            <div className="text-red-600 mb-4">{error}</div>
-            <Button onClick={() => window.location.reload()}>
-              Reintentar
-            </Button>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center">Acceso Administrativo</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAuth} className="space-y-4">
+              <div>
+                <Input
+                  name="username"
+                  type="text"
+                  placeholder="Usuario"
+                  required
+                  autoComplete="username"
+                />
+              </div>
+              <div>
+                <Input
+                  name="password"
+                  type="password"
+                  placeholder="Contraseña"
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+              {error && (
+                <p className="text-red-500 text-sm text-center">{error}</p>
+              )}
+              <Button type="submit" className="w-full">
+                Ingresar
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>
     );
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando leads...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Panel de Administración</h1>
-          <p className="text-slate-600">Gestión de leads y contactos</p>
+          <h1 className="text-3xl font-bold text-gray-900">Panel Administrativo</h1>
+          <p className="mt-2 text-gray-600">Gestión de leads y contactos</p>
         </div>
 
         {/* Stats */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">
-                Total Leads
-              </CardTitle>
-              <Users className="h-4 w-4 text-slate-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-slate-900">{leads.length}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">
-                Este mes
-              </CardTitle>
-              <Calendar className="h-4 w-4 text-slate-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-slate-900">
-                {leads.filter(lead => {
-                  const leadDate = new Date(lead.createdAt);
-                  const now = new Date();
-                  return leadDate.getMonth() === now.getMonth() && 
-                         leadDate.getFullYear() === now.getFullYear();
-                }).length}
+            <CardContent className="p-6 flex items-center">
+              <Users className="h-8 w-8 text-blue-500 mr-4" />
+              <div>
+                <p className="text-2xl font-bold">{leads.length}</p>
+                <p className="text-gray-600">Total Leads</p>
               </div>
             </CardContent>
           </Card>
-
+          
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">
-                Última semana
-              </CardTitle>
-              <Mail className="h-4 w-4 text-slate-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-slate-900">
-                {leads.filter(lead => {
-                  const leadDate = new Date(lead.createdAt);
-                  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-                  return leadDate > weekAgo;
-                }).length}
+            <CardContent className="p-6 flex items-center">
+              <Mail className="h-8 w-8 text-green-500 mr-4" />
+              <div>
+                <p className="text-2xl font-bold">{filteredLeads.length}</p>
+                <p className="text-gray-600">Leads Filtrados</p>
               </div>
             </CardContent>
           </Card>
-
+          
           <Card>
-            <CardContent className="pt-6">
-              <Button onClick={exportToCSV} className="w-full">
-                <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
-              </Button>
+            <CardContent className="p-6 flex items-center">
+              <Calendar className="h-8 w-8 text-purple-500 mr-4" />
+              <div>
+                <p className="text-2xl font-bold">
+                  {leads.filter(lead => 
+                    new Date(lead.createdAt) > new Date(Date.now() - 24*60*60*1000)
+                  ).length}
+                </p>
+                <p className="text-gray-600">Últimas 24h</p>
+              </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Controls */}
+        <Card className="mb-8">
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  type="text"
+                  placeholder="Buscar leads..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Button 
+                onClick={exportCSV}
+                disabled={filteredLeads.length === 0}
+                className="flex items-center gap-2"
+              >
+                <Download size={16} />
+                Exportar CSV
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Error Message */}
+        {error && (
+          <Card className="mb-8 border-red-200 bg-red-50">
+            <CardContent className="p-4">
+              <p className="text-red-600">{error}</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Leads Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Leads recibidos</CardTitle>
+            <CardTitle>Leads Recibidos</CardTitle>
           </CardHeader>
           <CardContent>
-            {leads.length === 0 ? (
-              <div className="text-center py-12 text-slate-500">
-                No hay leads registrados aún.
+            {filteredLeads.length === 0 ? (
+              <div className="text-center py-12">
+                <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">
+                  {searchTerm ? 'No se encontraron leads con esos criterios' : 'No hay leads aún'}
+                </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {leads.map((lead) => (
-                  <div key={lead.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-slate-900">{lead.name}</h3>
-                        <p className="text-slate-600">{lead.email}</p>
-                      </div>
-                      <Badge variant="secondary" className="ml-4">
-                        {new Date(lead.createdAt).toLocaleDateString('es-ES')}
-                      </Badge>
-                    </div>
-                    
-                    <p className="text-slate-700 mb-3 leading-relaxed">
-                      {lead.message}
-                    </p>
-                    
-                    <Separator className="my-3" />
-                    
-                    <div className="text-xs text-slate-500 grid grid-cols-1 md:grid-cols-2 gap-2">
-                      <div>IP: {lead.ip || 'No disponible'}</div>
-                      <div>Fecha: {new Date(lead.createdAt).toLocaleString('es-ES')}</div>
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-4 font-medium">Fecha</th>
+                      <th className="text-left p-4 font-medium">Nombre</th>
+                      <th className="text-left p-4 font-medium">Email</th>
+                      <th className="text-left p-4 font-medium">Mensaje</th>
+                      <th className="text-left p-4 font-medium">Info Técnica</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLeads.map((lead) => (
+                      <tr key={lead.id} className="border-b hover:bg-gray-50">
+                        <td className="p-4">
+                          <div className="text-sm">
+                            <div className="font-medium">
+                              {new Date(lead.createdAt).toLocaleDateString('es-ES')}
+                            </div>
+                            <div className="text-gray-500">
+                              {new Date(lead.createdAt).toLocaleTimeString('es-ES')}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="font-medium">{lead.name}</div>
+                        </td>
+                        <td className="p-4">
+                          <a
+                            href={`mailto:${lead.email}`}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            {lead.email}
+                          </a>
+                        </td>
+                        <td className="p-4 max-w-md">
+                          <div className="text-sm text-gray-900 line-clamp-3">
+                            {lead.message}
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="space-y-1">
+                            {lead.ip && (
+                              <Badge variant="outline" className="text-xs">
+                                IP: {lead.ip}
+                              </Badge>
+                            )}
+                            {lead.userAgent && (
+                              <div className="text-xs text-gray-500 truncate max-w-32">
+                                {lead.userAgent.split(' ')[0]}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>
