@@ -1,0 +1,76 @@
+{
+  "site": {
+    "name": "NombreEmpresa",
+    "tagline": "Soluciones innovadoras para tu negocio",
+    "description": "Transformamos ideas en realidad con tecnología de vanguardia y un enfoque centrado en el cliente.",
+    "url": "https://nombreempresa.com",
+    "email": "contacto@nombreempresa.com",
+    "phone": "+34 900 000 000"
+  },
+  "hero": {
+    "headline": "Transformamos tu visión en realidad digital",
+    "subheadline": "Desarrollamos soluciones tecnológicas innovadoras que impulsan el crecimiento de tu negocio con resultados medibles.",
+    "cta": "Comenzar proyecto",
+    "ctaSecondary": "Ver casos de éxito"
+  },
+  "features": [
+    {
+      "title": "Desarrollo Ágil",
+      "description": "Metodologías ágiles que garantizan entregas rápidas y adaptación continua a tus necesidades.",
+      "icon": "Zap"
+    },
+    {
+      "title": "Tecnología Avanzada",
+      "description": "Stack moderno con React, Next.js, TypeScript y las mejores herramientas del mercado.",
+      "icon": "Code2"
+    },
+    {
+      "title": "Soporte 24/7",
+      "description": "Equipo dedicado disponible en todo momento para resolver cualquier incidencia.",
+      "icon": "Shield"
+    }
+  ],
+  "testimonials": [
+    {
+      "name": "María García",
+      "role": "CEO, TechStart",
+      "content": "El equipo superó nuestras expectativas. Entregaron un producto excepcional en tiempo récord.",
+      "avatar": "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg"
+    },
+    {
+      "name": "Carlos Rodríguez",
+      "role": "CTO, InnovateLab",
+      "content": "Profesionalidad y calidad técnica impecables. Definitivamente los recomendaríamos.",
+      "avatar": "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg"
+    },
+    {
+      "name": "Ana López",
+      "role": "Fundadora, StartupX",
+      "content": "Transformaron completamente nuestro negocio con soluciones tecnológicas innovadoras.",
+      "avatar": "https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg"
+    }
+  ],
+  "cta": {
+    "headline": "¿Listo para transformar tu negocio?",
+    "subheadline": "Comencemos a trabajar juntos en tu próximo proyecto exitoso.",
+    "button": "Contactar ahora"
+  },
+  "faq": [
+    {
+      "question": "¿Cuánto tiempo toma desarrollar un proyecto?",
+      "answer": "Los tiempos varían según la complejidad, pero típicamente entre 4-12 semanas para proyectos completos."
+    },
+    {
+      "question": "¿Qué tecnologías utilizan?",
+      "answer": "Trabajamos con React, Next.js, TypeScript, Node.js, PostgreSQL y las mejores herramientas del ecosistema."
+    },
+    {
+      "question": "¿Ofrecen mantenimiento post-lanzamiento?",
+      "answer": "Sí, incluimos soporte técnico y mantenimiento para garantizar el funcionamiento óptimo de tu proyecto."
+    },
+    {
+      "question": "¿Pueden integrarse con sistemas existentes?",
+      "answer": "Absolutamente. Tenemos experiencia integrando con CRMs, ERPs y múltiples APIs de terceros."
+    }
+  ]
+}
